@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from utils import (
+
+from .utils import (
     DEFAULT_EPS,
     PADDED_Y_VALUE,
     dcg,

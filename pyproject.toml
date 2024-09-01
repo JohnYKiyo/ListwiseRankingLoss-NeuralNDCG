@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuralndcgloss"
+version = "1.0.2"
+description = "A Python Package for Baysian Optimization Framework."
+authors = [{name = "Yu Kiyokawa", email = "dummn.marionette.7surspecies@gmail.com"}]
+license = {text = "MIT License"}
+readme = "README.md"
+keywords = ["Listwise Ranking Loss", "Neural Normalized Discounted Cumulative Gain",  "NeuralNDCG"]
+urls = {Homepage = "https://github.com/JohnYKiyo/ListwiseRankingLoss-NDCG"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License"
+]
+dependencies = [
+    "numpy>=1.22.0",
+    "torch>=2.4.0"
+]
+requires-python = ">= 3.9"
+
+[tool.setuptools]
+packages = ["neuralndcgloss"]
+
+[tool.setuptools.package-dir]
+neuralndcgloss = "loss"
