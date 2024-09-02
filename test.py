@@ -1,9 +1,8 @@
 import unittest
 
 import torch
-from utils import get_torch_device
-
-from loss import NeuralNDCGLoss
+from neuralndcgloss import NeuralNDCGLoss
+from neuralndcgloss.utils import get_torch_device
 
 
 class TestNeuralNDCG(unittest.TestCase):
