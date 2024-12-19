@@ -6,7 +6,7 @@ permissions:
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
     branches-ignore:
       - master
       - main
@@ -22,7 +22,10 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    if: (github.event_name == 'issue_comment' && contains(github.event.comment.body, '[run review]') && github.event.issue.pull_request) || (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '[run review]')) || (github.event_name == 'pull_request' && !contains(github.event.pull_request.title, 'release') && !contains(github.event.pull_request.title, 'Release'))
+    if: >
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '[run review]') && github.event.issue.pull_request) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '[run review]')) ||
+      (github.event_name == 'pull_request' && !contains(github.event.pull_request.title, 'release') && !contains(github.event.pull_request.title, 'Release'))
     timeout-minutes: 15
     steps:
       - uses: coderabbitai/openai-pr-reviewer@latest
@@ -33,9 +36,9 @@ jobs:
           debug: false
           review_simple_changes: false
           review_comment_lgtm: false
-          openai_light_model: gpt-4 # 好みで変更
-          openai_heavy_model: gpt-4 # 好みで変更
-          openai_timeout_ms: 900000 # 15分.
+          openai_light_model: gpt-4
+          openai_heavy_model: gpt-4
+          openai_timeout_ms: 900000
           language: ja-JP
           path_filters: |
             !db/**
@@ -56,39 +59,12 @@ jobs:
               - 最適化
               - ベストプラクティス: DRY, SOLID, KISS
             特に、以下のソフトウェア設計原則とベストプラクティスに従った提案を行ってください：
-              - **DRY（Don't Repeat Yourself）**: 冗長なコードを排除し、再利用可能な構造を提案してください。
-              - **SOLID原則**: 単一責任の原則、オープン/クローズド原則など、保守性を高める設計を推奨してください。
-              - **KISS（Keep It Simple, Stupid）**: コードのシンプルさを重視し、複雑性を排除してください。
-
-            些細なコードスタイルの問題や、コメント・ドキュメントの欠落についてはコメントしないでください。
-            重要な問題を特定し、解決して全体的なコード品質を向上させることを目指してください。細かい問題は意図的に無視してください。
+              - **DRY（Don't Repeat Yourself）**
+              - **SOLID原則**
+              - **KISS（Keep It Simple, Stupid）**
 
           summarize: |
-            次の内容でmarkdownフォーマットを使用して、最終的な回答を提供してください。
-
-              ### ウォークスルー
-              - プルリクエスト全体の変更内容を簡潔に80語以内で要約してください。
-              - 特に、変更がコードベースに与える影響や意図を明確に記述してください。
-
-              ### 変更点
-              - ファイルごとの変更内容を簡潔に説明し、同様の変更は1行にまとめてください。
-              - 表形式で整理して記述してください。
-
-              ### 改善提案
-              - 以下の観点に基づき、重要な問題点や改善点を特定してください：
-                - **ベストプラクティス**: DRY、SOLID、KISS、YAGNIなどの設計原則に違反している箇所の特定と改善案。
-                - **セキュリティ**: 潜在的な脆弱性や攻撃リスクの排除。
-                - **パフォーマンス**: 非効率なアルゴリズムやリソース消費の削減。
-                - **保守性とモジュール性**: 一貫性を高め、再利用性を向上させる変更案。
-              - 改善案にはコードスニペットを含め、開発者がすぐに実行可能な提案を行ってください。
-
+            ### ウォークスルー
+            - プルリクエスト全体の変更内容を簡潔に80語以内で要約してください。
           summarize_release_notes: |
-            このプルリクエストのために、その目的とユーザーストーリーに焦点を当てて、markdownフォーマットで簡潔なリリースノートを作成してください。
-            変更は次のように分類し箇条書きにすること:
-              "New Feature", "Bug fix", "Documentation", "Refactor", "Style",
-              "Test", "Chore", "Revert"
-            例えば:
-            ```
-            - New Feature: UIに統合ページが追加されました
-            ```
-            回答は50-100語以内にしてください。この回答はそのままリリースノートに使用されるので、追加のコメントは避けてください。
+            - New Feature: Example description.
