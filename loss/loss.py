@@ -66,16 +66,28 @@ class NeuralNDCGLoss(nn.Module):
             torch.Tensor: Loss値.
         """
         dev = get_torch_device()
-
-        if self.k is None:
-            k = y_true.shape[1]
-        else:
-            k = self.k
-
+        k = self.k if self.k is not None else y_true.shape[1]
         mask = y_true == self.padded_value_indicator
 
+        P_hat = self.compute_P_hat(y_pred, mask)
+        if not self.transposed:
+            discounted_gains = self.compute_discounted_gains_not_transposed(P_hat, y_true, mask, dev, k)
+        else:
+            discounted_gains = self.compute_discounted_gains_transposed(P_hat, y_true, mask, dev, k)
+
+        idcg = self.compute_idcg(y_true, k)
+
+        ndcg = self.compute_ndcg(discounted_gains, idcg, k)
+        assert (ndcg < 0.0).sum() == 0, "every ndcg should be non-negative"
+        if torch.all(idcg == 0.0):
+            return torch.tensor(0.0)
+        mean_ndcg = ndcg.sum() / ((~(idcg == 0.0)).sum() * ndcg.shape[0])  # type: ignore
+        return -1.0 * mean_ndcg  # -1 cause we want to maximize NDCG
+
+    def compute_P_hat(self, y_pred, mask):
+        """Compute the permutation matrix P_hat."""
         if self.stochastic:
-            P_hat = stochastic_neural_sort(
+            return stochastic_neural_sort(
                 y_pred.unsqueeze(-1),
                 n_samples=self.n_samples,
                 tau=self.temperature,
@@ -84,96 +96,61 @@ class NeuralNDCGLoss(nn.Module):
                 log_scores=self.log_scores,
             )
         else:
-            P_hat = deterministic_neural_sort(
+            return deterministic_neural_sort(
                 y_pred.unsqueeze(-1), tau=self.temperature, mask=mask
             ).unsqueeze(0)
 
-        if not self.transposed:
-            P_hat = sinkhorn_scaling(
-                P_hat.view(
-                    P_hat.shape[0] * P_hat.shape[1], P_hat.shape[2], P_hat.shape[3]
-                ),
-                mask.repeat_interleave(P_hat.shape[0], dim=0),
-                tol=self.tol,
-                max_iter=self.max_iter,
-            )
-            P_hat = P_hat.view(
-                int(P_hat.shape[0] / y_pred.shape[0]),
-                y_pred.shape[0],
-                P_hat.shape[1],
-                P_hat.shape[2],
-            )
+    def compute_discounted_gains_not_transposed(self, P_hat, y_true, mask, dev, k):
+        """Compute discounted gains when not transposed."""
+        P_hat = sinkhorn_scaling(
+            P_hat.view(-1, P_hat.shape[2], P_hat.shape[3]),
+            mask.repeat_interleave(P_hat.shape[0], dim=0),
+            tol=self.tol,
+            max_iter=self.max_iter,
+        ).view(-1, y_true.shape[0], P_hat.shape[2], P_hat.shape[3])
 
-            P_hat = P_hat.masked_fill(
-                mask[None, :, :, None] | mask[None, :, None, :], 0.0
-            )
-            y_true_masked = y_true.masked_fill(mask, 0.0).unsqueeze(-1).unsqueeze(0)
-            if self.powered_relevancies:
-                y_true_masked = torch.pow(2.0, y_true_masked) - 1.0
+        P_hat = P_hat.masked_fill(mask[None, :, :, None] | mask[None, :, None, :], 0.0)
+        y_true_masked = y_true.masked_fill(mask, 0.0).unsqueeze(-1).unsqueeze(0)
+        if self.powered_relevancies:
+            y_true_masked = torch.pow(2.0, y_true_masked) - 1.0
+        ground_truth = torch.matmul(P_hat, y_true_masked).squeeze(-1)
+        discounts = (
+            1.0 / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0)
+        )
+        return ground_truth * discounts
 
-            ground_truth = torch.matmul(P_hat, y_true_masked).squeeze(-1)
-            discounts = (
-                torch.tensor(1.0)
-                / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float) + 2.0)
-            ).to(dev)
-            discounted_gains = ground_truth * discounts
+    def compute_discounted_gains_transposed(self, P_hat, y_true, mask, dev, k):
+        """Compute discounted gains when transposed."""
+        P_hat_masked = sinkhorn_scaling(
+            P_hat.view(-1, y_true.shape[1], y_true.shape[1]),
+            mask.repeat_interleave(P_hat.shape[0], dim=0),
+            tol=self.tol,
+            max_iter=self.max_iter,
+        ).view(P_hat.shape[0], y_true.shape[0], y_true.shape[1], y_true.shape[1])
 
-        else:
-            P_hat_masked = sinkhorn_scaling(
-                P_hat.view(
-                    P_hat.shape[0] * y_pred.shape[0], y_pred.shape[1], y_pred.shape[1]
-                ),
-                mask.repeat_interleave(P_hat.shape[0], dim=0),
-                tol=self.tol,
-                max_iter=self.max_iter,
-            )
-            P_hat_masked = P_hat_masked.view(
-                P_hat.shape[0], y_pred.shape[0], y_pred.shape[1], y_pred.shape[1]
-            )
-            discounts = (
-                torch.tensor(1.0)
-                / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float) + 2.0)
-            ).to(dev)
-
-            discounts[k:] = 0.0
-            discounts = discounts[None, None, :, None]
-            discounts = torch.matmul(
-                P_hat_masked.permute(0, 1, 3, 2), discounts
-            ).squeeze(-1)
-
-            if self.powered_relevancies:
-                gains = torch.pow(2.0, y_true) - 1
-            else:
-                gains = y_true
-
-            discounted_gains = gains.unsqueeze(0) * discounts
+        discounts = 1.0 / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0)
+        discounts[k:] = 0.0
+        discounts = discounts[None, None, :, None]
+        discounts = torch.matmul(P_hat_masked.permute(0, 1, 3, 2), discounts).squeeze(-1)
 
         if self.powered_relevancies:
-            idcg = (
-                dcg(y_true, y_true, ats=[k]).permute(1, 0)
-                if not self.transposed
-                else dcg(y_true, y_true, ats=[k]).squeeze()
-            )
+            gains = torch.pow(2.0, y_true) - 1
         else:
-            idcg = (
-                dcg(y_true, y_true, ats=[k], gain_function=lambda x: x).permute(1, 0)
-                if not self.transposed
-                else dcg(y_true, y_true, ats=[k], gain_function=lambda x: x).squeeze()
-            )
+            gains = y_true
 
+        return gains.unsqueeze(0) * discounts
+
+    def compute_idcg(self, y_true, k):
+        """Compute ideal discounted cumulative gain (IDCG)."""
+        dcg_func = dcg(y_true, y_true, ats=[k])
+        if not self.powered_relevancies:
+            dcg_func = dcg(y_true, y_true, ats=[k], gain_function=lambda x: x)
+        return dcg_func.permute(1, 0) if not self.transposed else dcg_func.squeeze()
+
+    def compute_ndcg(self, discounted_gains, idcg, k):
+        """Compute normalized discounted cumulative gain (NDCG)."""
         if not self.transposed:
             discounted_gains = discounted_gains[:, :, :k]
-            ndcg = discounted_gains.sum(dim=-1) / (idcg + DEFAULT_EPS)
-            idcg_mask = idcg == 0.0
-            ndcg = ndcg.masked_fill(idcg_mask.repeat(ndcg.shape[0], 1), 0.0)
-        else:
-            ndcg = discounted_gains.sum(dim=2) / (idcg + DEFAULT_EPS)
-            idcg_mask = idcg == 0.0
-            ndcg = ndcg.masked_fill(idcg_mask, 0.0)
-
-        assert (ndcg < 0.0).sum() == 0, "every ndcg should be non-negative"
-        if idcg_mask.all():
-            return torch.tensor(0.0)
-
-        mean_ndcg = ndcg.sum() / ((~idcg_mask).sum() * ndcg.shape[0])  # type: ignore
-        return -1.0 * mean_ndcg  # -1 cause we want to maximize NDCG
+        ndcg = discounted_gains.sum(dim=-1 if not self.transposed else 2) / (idcg + DEFAULT_EPS)
+        idcg_mask = idcg == 0.0
+        return ndcg.masked_fill(idcg_mask.repeat(ndcg.shape[0], 1) if not self.transposed else idcg_mask, 0.0)
