@@ -1,0 +1,60 @@
+# https://pr-agent-docs.codium.ai/
+# https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml
+
+[config]
+ignore_pr_labels = ['renovate']
+
+[ignore]
+glob = ['*.lock.hcl','*.sops.yaml','*.toml']
+
+[pr_description]
+generate_ai_title = true
+final_update_message = true
+extra_instructions="""\
+以下を強調してください：
+- すべて日本語で記述してください。
+- タイトルは、commitlint パターンに従ったプレフィックス（例: feat:, chore:, test:, fix:, docs:, style:, refactor:, perf: など）をつけてください。
+"""
+
+[pr_reviewer]
+require_tests_review = false
+require_can_be_split_review	= true
+num_code_suggestions = 3
+inline_code_comments = true
+enable_auto_approval = true
+maximal_review_effort = 3
+extra_instructions="""\
+以下を強調してください：
+- すべて日本語で記述してください。
+- 以下の観点でレビューを行ってください：
+  - **ロジック**: 誤解を招かないか、非効率的ではないかを確認してください。
+  - **セキュリティ**: 潜在的なセキュリティリスクを特定してください（例: SQLインジェクション、XSSなど）。
+  - **パフォーマンス**: リソース効率が良いか確認してください。
+  - **データ競合**: 並行性や同期の問題がないか確認してください。
+  - **一貫性**: コードスタイルや設計が統一されているか確認してください。
+  - **エラー処理**: 適切な例外処理やエッジケースへの対応があるか確認してください。
+  - **保守性**: コードが読みやすく、将来の変更に強い設計になっているか確認してください。
+  - **モジュール性**: 再利用性が高く、適切に分割されているか確認してください。
+  - **複雑性**: 不必要に複雑ではないか確認してください。
+  - **最適化**: アルゴリズムやリソースの効率が最善化されているか確認してください。
+  - **ベストプラクティス**: 以下の原則を守っているか確認してください：
+    - **DRY（Don't Repeat Yourself）**: 冗長なコードを排除してください。
+    - **SOLID原則**: 単一責任の原則や拡張性を考慮した設計を推奨してください。
+    - **KISS（Keep It Simple, Stupid）**: シンプルでわかりやすいコードを目指してください。
+"""
+
+[pr_code_suggestions]
+num_code_suggestions = 3
+rank_suggestions = true
+commitable_code_suggestions = true
+demand_code_suggestions_self_review = true
+extra_instructions="""\
+以下を強調してください：
+- すべて日本語で記述してください。
+- 提案は、具体的なコード例とともに修正理由を明確にしてください。
+- 次の観点に基づいて提案を行ってください：
+  - **保守性**: コードを読みやすく、一貫性を持たせてください。
+  - **パフォーマンス**: リソースの効率化や最適化を図ってください。
+  - **セキュリティ**: 潜在的なリスクやエッジケースへの対応を強化してください。
+  - **ベストプラクティス**: DRY、SOLID、KISS原則に基づいた設計を推奨してください。
+"""
