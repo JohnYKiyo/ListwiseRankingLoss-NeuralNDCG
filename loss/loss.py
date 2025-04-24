@@ -71,9 +71,13 @@ class NeuralNDCGLoss(nn.Module):
 
         P_hat = self.compute_P_hat(y_pred, mask)
         if not self.transposed:
-            discounted_gains = self.compute_discounted_gains_not_transposed(P_hat, y_true, mask, dev, k)
+            discounted_gains = self.compute_discounted_gains_not_transposed(
+                P_hat, y_true, mask, dev, k
+            )
         else:
-            discounted_gains = self.compute_discounted_gains_transposed(P_hat, y_true, mask, dev, k)
+            discounted_gains = self.compute_discounted_gains_transposed(
+                P_hat, y_true, mask, dev, k
+            )
 
         idcg = self.compute_idcg(y_true, k)
 
@@ -114,8 +118,8 @@ class NeuralNDCGLoss(nn.Module):
         if self.powered_relevancies:
             y_true_masked = torch.pow(2.0, y_true_masked) - 1.0
         ground_truth = torch.matmul(P_hat, y_true_masked).squeeze(-1)
-        discounts = (
-            1.0 / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0)
+        discounts = 1.0 / torch.log2(
+            torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0
         )
         return ground_truth * discounts
 
@@ -128,10 +132,14 @@ class NeuralNDCGLoss(nn.Module):
             max_iter=self.max_iter,
         ).view(P_hat.shape[0], y_true.shape[0], y_true.shape[1], y_true.shape[1])
 
-        discounts = 1.0 / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0)
+        discounts = 1.0 / torch.log2(
+            torch.arange(y_true.shape[-1], dtype=torch.float, device=dev) + 2.0
+        )
         discounts[k:] = 0.0
         discounts = discounts[None, None, :, None]
-        discounts = torch.matmul(P_hat_masked.permute(0, 1, 3, 2), discounts).squeeze(-1)
+        discounts = torch.matmul(P_hat_masked.permute(0, 1, 3, 2), discounts).squeeze(
+            -1
+        )
 
         if self.powered_relevancies:
             gains = torch.pow(2.0, y_true) - 1
@@ -151,6 +159,11 @@ class NeuralNDCGLoss(nn.Module):
         """Compute normalized discounted cumulative gain (NDCG)."""
         if not self.transposed:
             discounted_gains = discounted_gains[:, :, :k]
-        ndcg = discounted_gains.sum(dim=-1 if not self.transposed else 2) / (idcg + DEFAULT_EPS)
+        ndcg = discounted_gains.sum(dim=-1 if not self.transposed else 2) / (
+            idcg + DEFAULT_EPS
+        )
         idcg_mask = idcg == 0.0
-        return ndcg.masked_fill(idcg_mask.repeat(ndcg.shape[0], 1) if not self.transposed else idcg_mask, 0.0)
+        return ndcg.masked_fill(
+            idcg_mask.repeat(ndcg.shape[0], 1) if not self.transposed else idcg_mask,
+            0.0,
+        )
